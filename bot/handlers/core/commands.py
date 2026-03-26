@@ -1,25 +1,19 @@
+"""Command handlers for test mode and Telegram mode."""
+
 from services.lms_client import BackendError, get_items, get_pass_rates
-from services.llm_router import route
 
 
 def handle_start() -> str:
-    return "Welcome! I can answer LMS questions in plain English. Try: 'what labs are available?' or 'which lab has the lowest pass rate?'"
+    return "Welcome! I'm your LMS assistant bot. Use /help to see available commands."
 
 
 def handle_help() -> str:
     return """Available commands:
-/start - Start the bot
-/help - Show help
-/health - Check backend status
+/start - Start the bot and see welcome message
+/help - Show this help message
+/health - Check backend connection status
 /labs - List available labs
-/scores <lab_id> - Show pass rates for a lab
-
-You can also ask plain-text questions, like:
-- what labs are available?
-- show me scores for lab 4
-- which lab has the lowest pass rate?
-- who are the top 5 students in lab 4?
-"""
+/scores <lab_id> - Get pass rates for a specific lab"""
 
 
 def handle_health() -> str:
@@ -36,15 +30,21 @@ def handle_labs() -> str:
     except BackendError as exc:
         return str(exc)
 
-    labs = [item for item in items if item.get("type") == "lab"]
+    labs = []
+    for item in items:
+        item_type = str(item.get("type", "")).lower()
+        item_id = str(item.get("id", ""))
+        title = str(item.get("title", item.get("name", item_id)))
+
+        if item_type == "lab" or item_id.startswith("lab-"):
+            labs.append((item_id, title))
+
     if not labs:
-        return "No labs found."
+        return "No labs found in backend data."
 
     lines = ["Available labs:"]
-    for item in labs:
-        lab_num = item.get("id")
-        title = item.get("title", "")
-        lines.append(f"- lab-{int(lab_num):02d}: {title}")
+    for lab_id, title in labs:
+        lines.append(f"- {lab_id}: {title}")
     return "\n".join(lines)
 
 
@@ -62,9 +62,22 @@ def handle_scores(lab_id: str | None = None) -> str:
 
     lines = [f"Pass rates for {lab_id}:"]
     for row in rows:
-        task_name = row.get("task") or row.get("task_name") or row.get("name") or "Unknown task"
-        rate = row.get("pass_rate") or row.get("avg_pass_rate") or row.get("percentage") or 0
+        task_name = (
+            row.get("task")
+            or row.get("task_name")
+            or row.get("name")
+            or "Unknown task"
+        )
+
+        rate = (
+            row.get("pass_rate")
+            or row.get("avg_pass_rate")
+            or row.get("percentage")
+            or 0
+        )
+
         attempts = row.get("attempts") or row.get("count") or row.get("submissions")
+
         try:
             rate_value = float(rate)
         except (TypeError, ValueError):
@@ -76,7 +89,3 @@ def handle_scores(lab_id: str | None = None) -> str:
             lines.append(f"- {task_name}: {rate_value:.1f}%")
 
     return "\n".join(lines)
-
-
-def handle_text(text: str) -> str:
-    return route(text)
