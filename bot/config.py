@@ -29,3 +29,4 @@ class BotConfig(BaseSettings):
 
 
 config = BotConfig()
+

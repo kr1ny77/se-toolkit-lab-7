@@ -2,9 +2,6 @@ import argparse
 import sys
 from pathlib import Path
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import config
@@ -51,49 +48,45 @@ def run_test_mode(command_text: str) -> None:
         sys.exit(0)
 
     print(f"Unknown command: {command_text}")
-    print("Available commands: /start, /help, /health, /labs, /scores")
+    print("Use /help to see available commands.")
     sys.exit(1)
 
 
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text(handle_start())
-
-
-async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text(handle_help())
-
-
-async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text(handle_health())
-
-
-async def labs_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text(handle_labs())
-
-
-async def scores_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message:
-        return
-
-    if context.args:
-        await update.message.reply_text(handle_scores(context.args[0]))
-    else:
-        await update.message.reply_text(handle_scores())
-
-
-async def text_msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text("Use /help to see available commands.")
-
-
 def run_production_mode() -> None:
+    from telegram import Update
+    from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+
     if not config.bot_token:
         print("BOT_TOKEN is missing in .env.bot.secret")
         sys.exit(1)
+
+    async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message:
+            await update.message.reply_text(handle_start())
+
+    async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message:
+            await update.message.reply_text(handle_help())
+
+    async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message:
+            await update.message.reply_text(handle_health())
+
+    async def labs_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message:
+            await update.message.reply_text(handle_labs())
+
+    async def scores_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.message:
+            return
+        if context.args:
+            await update.message.reply_text(handle_scores(context.args[0]))
+        else:
+            await update.message.reply_text(handle_scores())
+
+    async def text_msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message:
+            await update.message.reply_text("Use /help to see available commands.")
 
     app = Application.builder().token(config.bot_token).build()
 
@@ -110,12 +103,7 @@ def run_production_mode() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="SE Toolkit Lab 7 Telegram Bot")
-    parser.add_argument(
-        "--test",
-        type=str,
-        metavar="COMMAND",
-        help="Test mode: run command handler directly (e.g., '/start')",
-    )
+    parser.add_argument("--test", type=str, metavar="COMMAND")
     args = parser.parse_args()
 
     if args.test:
