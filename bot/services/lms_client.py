@@ -4,7 +4,7 @@ from config import config
 
 
 class BackendError(Exception):
-    """User-friendly backend error for handlers."""
+    pass
 
 
 def _headers() -> dict[str, str]:
@@ -14,52 +14,75 @@ def _headers() -> dict[str, str]:
     }
 
 
-def _format_http_error(response: httpx.Response) -> str:
-    return f"Backend error: HTTP {response.status_code} {response.reason_phrase}. The backend service may be down."
+def _handle_response(response: httpx.Response):
+    response.raise_for_status()
+    return response.json()
 
 
-def _format_connect_error(exc: Exception) -> str:
-    return f"Backend error: {str(exc)}. Check that the services are running."
-
-
-def get_items() -> list[dict]:
-    url = f"{config.lms_api_base_url}/items/"
+def _get(path: str, params: dict | None = None):
+    url = f"{config.lms_api_base_url}{path}"
     try:
-        response = httpx.get(url, headers=_headers(), timeout=10.0)
-        response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, list):
-            raise BackendError("Backend error: unexpected /items response format.")
-        return data
+        response = httpx.get(url, headers=_headers(), params=params, timeout=20.0)
+        return _handle_response(response)
     except httpx.HTTPStatusError as exc:
-        raise BackendError(_format_http_error(exc.response)) from exc
+        raise BackendError(f"Backend error: HTTP {exc.response.status_code} {exc.response.reason_phrase}") from exc
     except httpx.ConnectError as exc:
-        raise BackendError(_format_connect_error(exc)) from exc
+        raise BackendError(f"Backend error: connection failed: {exc}") from exc
     except httpx.TimeoutException as exc:
-        raise BackendError(f"Backend error: request timed out. {exc}") from exc
+        raise BackendError(f"Backend error: timeout: {exc}") from exc
     except httpx.HTTPError as exc:
         raise BackendError(f"Backend error: {exc}") from exc
 
 
-def get_pass_rates(lab_id: str) -> list[dict]:
-    url = f"{config.lms_api_base_url}/analytics/pass-rates"
+def _post(path: str, payload: dict | None = None):
+    url = f"{config.lms_api_base_url}{path}"
     try:
-        response = httpx.get(
-            url,
-            headers=_headers(),
-            params={"lab": lab_id},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, list):
-            raise BackendError("Backend error: unexpected /analytics/pass-rates response format.")
-        return data
+        response = httpx.post(url, headers=_headers(), json=payload or {}, timeout=30.0)
+        return _handle_response(response)
     except httpx.HTTPStatusError as exc:
-        raise BackendError(_format_http_error(exc.response)) from exc
+        raise BackendError(f"Backend error: HTTP {exc.response.status_code} {exc.response.reason_phrase}") from exc
     except httpx.ConnectError as exc:
-        raise BackendError(_format_connect_error(exc)) from exc
+        raise BackendError(f"Backend error: connection failed: {exc}") from exc
     except httpx.TimeoutException as exc:
-        raise BackendError(f"Backend error: request timed out. {exc}") from exc
+        raise BackendError(f"Backend error: timeout: {exc}") from exc
     except httpx.HTTPError as exc:
         raise BackendError(f"Backend error: {exc}") from exc
+
+
+def get_items():
+    return _get("/items/")
+
+
+def get_learners():
+    return _get("/learners/")
+
+
+def get_scores(lab: str):
+    return _get("/analytics/scores", {"lab": lab})
+
+
+def get_pass_rates(lab: str):
+    return _get("/analytics/pass-rates", {"lab": lab})
+
+
+def get_timeline(lab: str):
+    return _get("/analytics/timeline", {"lab": lab})
+
+
+def get_groups(lab: str):
+    return _get("/analytics/groups", {"lab": lab})
+
+
+def get_top_learners(lab: str | None = None, limit: int = 5):
+    params = {"limit": limit}
+    if lab:
+        params["lab"] = lab
+    return _get("/analytics/top-learners", params)
+
+
+def get_completion_rate(lab: str):
+    return _get("/analytics/completion-rate", {"lab": lab})
+
+
+def trigger_sync():
+    return _post("/pipeline/sync", {})

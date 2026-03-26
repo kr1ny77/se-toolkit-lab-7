@@ -6,11 +6,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import config
 from handlers.commands import (
-    handle_start,
-    handle_help,
     handle_health,
+    handle_help,
     handle_labs,
     handle_scores,
+    handle_start,
+    handle_text,
 )
 
 
@@ -47,22 +48,41 @@ def run_test_mode(command_text: str) -> None:
             print(handle_scores())
         sys.exit(0)
 
-    print(f"Unknown command: {command_text}")
-    print("Use /help to see available commands.")
-    sys.exit(1)
+    if command.startswith("/"):
+        print(f"Unknown command: {command_text}")
+        print("Use /help to see available commands.")
+        sys.exit(0)
+
+    print(handle_text(command_text))
+    sys.exit(0)
 
 
 def run_production_mode() -> None:
-    from telegram import Update
-    from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.ext import (
+        Application,
+        CallbackQueryHandler,
+        CommandHandler,
+        ContextTypes,
+        MessageHandler,
+        filters,
+    )
 
     if not config.bot_token:
         print("BOT_TOKEN is missing in .env.bot.secret")
         sys.exit(1)
 
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("What labs are available?", callback_data="what labs are available?")],
+            [InlineKeyboardButton("Show scores for lab 4", callback_data="show me scores for lab 4")],
+            [InlineKeyboardButton("Lowest pass rate", callback_data="which lab has the lowest pass rate?")],
+        ]
+    )
+
     async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message:
-            await update.message.reply_text(handle_start())
+            await update.message.reply_text(handle_start(), reply_markup=keyboard)
 
     async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message:
@@ -86,7 +106,14 @@ def run_production_mode() -> None:
 
     async def text_msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.message:
-            await update.message.reply_text("Use /help to see available commands.")
+            await update.message.reply_text(handle_text(update.message.text or ""))
+
+    async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if not query:
+            return
+        await query.answer()
+        await query.message.reply_text(handle_text(query.data or ""))
 
     app = Application.builder().token(config.bot_token).build()
 
@@ -95,6 +122,7 @@ def run_production_mode() -> None:
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CommandHandler("labs", labs_cmd))
     app.add_handler(CommandHandler("scores", scores_cmd))
+    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_msg))
 
     print("Bot started")
